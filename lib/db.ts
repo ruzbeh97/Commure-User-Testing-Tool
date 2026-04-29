@@ -1,7 +1,7 @@
 import { createClient, type ResultSet, type Row } from '@libsql/client';
 
 const client = createClient({
-  url: process.env.TURSO_DATABASE_URL ?? 'file:./database/app.db',
+  url: process.env.TURSO_DATABASE_URL ?? 'file:/tmp/app.db',
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
