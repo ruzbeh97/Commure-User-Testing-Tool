@@ -1,6 +1,7 @@
 import { getTest } from '@/lib/queries/tests';
 import { getProject } from '@/lib/queries/projects';
 import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
 import Link from 'next/link';
 import { formatDate } from '@/lib/utils';
 import { FlaskConical, ArrowLeft, Play, BarChart2, Link2, ExternalLink } from 'lucide-react';
@@ -15,11 +16,12 @@ const typeLabel: Record<TestType, string> = { ab: 'A/B Test', usability: 'Usabil
 
 export default async function TestDetailPage({ params }: { params: Promise<{ projectId: string; testId: string }> }) {
   const { projectId, testId } = await params;
-  const project = await getProject(projectId);
-  const test = await getTest(testId);
+  const [project, test, hdrs] = await Promise.all([getProject(projectId), getTest(testId), headers()]);
   if (!project || !test) notFound();
 
-  const runUrl = `http://localhost:3000/projects/${projectId}/tests/${testId}/run`;
+  const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host') ?? 'localhost:3000';
+  const proto = hdrs.get('x-forwarded-proto') ?? 'http';
+  const runUrl = `${proto}://${host}/projects/${projectId}/tests/${testId}/run`;
 
   return (
     <div className="min-h-screen bg-gray-50">
