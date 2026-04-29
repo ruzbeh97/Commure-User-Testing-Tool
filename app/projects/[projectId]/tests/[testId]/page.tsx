@@ -15,8 +15,8 @@ const typeLabel: Record<TestType, string> = { ab: 'A/B Test', usability: 'Usabil
 
 export default async function TestDetailPage({ params }: { params: Promise<{ projectId: string; testId: string }> }) {
   const { projectId, testId } = await params;
-  const project = getProject(projectId);
-  const test = getTest(testId);
+  const project = await getProject(projectId);
+  const test = await getTest(testId);
   if (!project || !test) notFound();
 
   const runUrl = `http://localhost:3000/projects/${projectId}/tests/${testId}/run`;

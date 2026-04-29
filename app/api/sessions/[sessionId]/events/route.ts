@@ -9,7 +9,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ session
       return NextResponse.json({ ok: true });
     }
     const events = body.events.slice(0, 500);
-    insertEvents(sessionId, events);
+    await insertEvents(sessionId, events);
     return NextResponse.json({ ok: true, count: events.length });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

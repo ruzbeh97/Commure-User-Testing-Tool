@@ -6,8 +6,8 @@ import { Badge, statusBadge } from '@/components/ui/Badge';
 
 export const dynamic = 'force-dynamic';
 
-export default function ProjectsPage() {
-  const projects = listProjects();
+export default async function ProjectsPage() {
+  const projects = await listProjects();
 
   return (
     <div className="min-h-screen bg-gray-50">

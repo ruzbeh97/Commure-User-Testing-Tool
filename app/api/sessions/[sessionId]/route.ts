@@ -5,7 +5,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ sessio
   try {
     const { sessionId } = await params;
     const body = await req.json().catch(() => ({}));
-    completeSession(sessionId, {
+    await completeSession(sessionId, {
       notes: body.notes,
       taskResults: body.taskResults,
     });

@@ -1,44 +1,50 @@
-import getDb from '../db';
+import { getDb, toRow, toRows } from '../db';
 import { nanoid } from 'nanoid';
 import type { Project } from '@/types';
 
-export function listProjects(): Project[] {
-  const db = getDb();
-  return db.prepare(`
-    SELECT p.*, COUNT(t.id) as test_count
+export async function listProjects(): Promise<Project[]> {
+  const db = await getDb();
+  const result = await db.execute(`
+    SELECT p.id, p.name, p.description, p.created_at, p.updated_at,
+           COUNT(t.id) as test_count
     FROM projects p
     LEFT JOIN tests t ON t.project_id = p.id
     GROUP BY p.id
     ORDER BY p.updated_at DESC
-  `).all() as Project[];
+  `);
+  return toRows<Project>(result);
 }
 
-export function getProject(id: string): Project | undefined {
-  const db = getDb();
-  return db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Project | undefined;
+export async function getProject(id: string): Promise<Project | undefined> {
+  const db = await getDb();
+  const result = await db.execute({ sql: 'SELECT * FROM projects WHERE id = ?', args: [id] });
+  return toRow<Project>(result);
 }
 
-export function createProject(data: { name: string; description?: string }): Project {
-  const db = getDb();
+export async function createProject(data: { name: string; description?: string }): Promise<Project> {
+  const db = await getDb();
   const now = Date.now();
   const id = nanoid();
-  db.prepare('INSERT INTO projects (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-    .run(id, data.name, data.description ?? null, now, now);
-  return getProject(id)!;
+  await db.execute({
+    sql: 'INSERT INTO projects (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+    args: [id, data.name, data.description ?? null, now, now],
+  });
+  return (await getProject(id))!;
 }
 
-export function updateProject(id: string, data: { name?: string; description?: string }): Project | undefined {
-  const db = getDb();
+export async function updateProject(id: string, data: { name?: string; description?: string }): Promise<Project | undefined> {
+  const db = await getDb();
   const now = Date.now();
   if (data.name !== undefined) {
-    db.prepare('UPDATE projects SET name = ?, updated_at = ? WHERE id = ?').run(data.name, now, id);
+    await db.execute({ sql: 'UPDATE projects SET name = ?, updated_at = ? WHERE id = ?', args: [data.name, now, id] });
   }
   if (data.description !== undefined) {
-    db.prepare('UPDATE projects SET description = ?, updated_at = ? WHERE id = ?').run(data.description, now, id);
+    await db.execute({ sql: 'UPDATE projects SET description = ?, updated_at = ? WHERE id = ?', args: [data.description, now, id] });
   }
   return getProject(id);
 }
 
-export function deleteProject(id: string): void {
-  getDb().prepare('DELETE FROM projects WHERE id = ?').run(id);
+export async function deleteProject(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({ sql: 'DELETE FROM projects WHERE id = ?', args: [id] });
 }

@@ -5,8 +5,7 @@ import { TestRunner } from '@/components/runner/TestRunner';
 
 export default async function RunTestPage({ params }: { params: Promise<{ projectId: string; testId: string }> }) {
   const { projectId, testId } = await params;
-  const test = getTest(testId);
-  const project = getProject(projectId);
+  const [test, project] = await Promise.all([getTest(testId), getProject(projectId)]);
   if (!test || !project) notFound();
 
   return (

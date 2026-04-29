@@ -17,9 +17,9 @@ const typeLabel: Record<TestType, string> = {
 
 export default async function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) notFound();
-  const tests = listTests(projectId);
+  const tests = await listTests(projectId);
 
   return (
     <div className="min-h-screen bg-gray-50">

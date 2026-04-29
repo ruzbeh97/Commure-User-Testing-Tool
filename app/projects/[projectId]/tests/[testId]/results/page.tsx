@@ -15,8 +15,7 @@ const typeLabel: Record<TestType, string> = { ab: 'A/B Test', usability: 'Usabil
 
 export default async function ResultsPage({ params }: { params: Promise<{ projectId: string; testId: string }> }) {
   const { projectId, testId } = await params;
-  const project = getProject(projectId);
-  const results = getResults(testId);
+  const [project, results] = await Promise.all([getProject(projectId), getResults(testId)]);
   if (!project || !results?.test) notFound();
 
   const { test, sessions, taskStats, clickEvents, variantComparison } = results;
