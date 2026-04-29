@@ -15,7 +15,7 @@ export default async function ProjectsPage() {
       <nav className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FlaskConical size={22} className="text-indigo-600" />
-          <span className="font-bold text-gray-900 text-lg">UX Testing</span>
+          <span className="font-bold text-gray-900 text-lg">Commure UX Testing Tool</span>
         </div>
       </nav>
 

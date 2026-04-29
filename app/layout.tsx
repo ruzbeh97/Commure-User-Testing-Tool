@@ -6,7 +6,7 @@ import { NotificationInit } from "@/components/NotificationInit";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "UX Testing Platform",
+  title: "Commure UX Testing Tool",
   description: "Run usability tests, A/B tests, and prototype testing",
 };
 
