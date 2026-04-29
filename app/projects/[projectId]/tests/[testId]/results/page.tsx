@@ -81,7 +81,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ projec
               </div>
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
                 <p className="text-xs text-gray-400 mb-3">Coordinates normalized to tester viewport. Hot zones = red, cold = blue.</p>
-                <HeatmapCanvas events={clickEvents} type="click" />
+                <HeatmapCanvas events={clickEvents} type="click" backgroundUrl={test.prototype_url ?? undefined} />
               </div>
             </section>
 
