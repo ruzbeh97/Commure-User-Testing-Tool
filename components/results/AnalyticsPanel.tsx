@@ -1,7 +1,7 @@
 'use client';
 import { formatDuration, formatPercent } from '@/lib/utils';
 import type { TaskStat, VariantStat } from '@/types';
-import { CheckCircle, Clock, Users, TrendingUp } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Users, TrendingUp } from 'lucide-react';
 
 export function AnalyticsPanel({ taskStats, variantComparison, sessionCount }: {
   taskStats: TaskStat[];
@@ -101,9 +101,15 @@ function StatCard({ icon, label, value, color }: {
 }
 
 function TaskStatRow({ index, stat }: { index: number; stat: TaskStat }) {
+  const completed = stat.completed_sessions ?? 0;
+  const total = stat.total_sessions ?? 0;
+  const couldntComplete = total - completed;
+  const completedPct = total > 0 ? (completed / total) * 100 : 0;
+  const couldntPct = total > 0 ? (couldntComplete / total) * 100 : 0;
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <div className="flex items-start justify-between gap-3 mb-2">
+      <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-start gap-2">
           <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold flex items-center justify-center mt-0.5">{index}</span>
           <p className="text-sm text-gray-800">{stat.instruction}</p>
@@ -113,18 +119,26 @@ function TaskStatRow({ index, stat }: { index: number; stat: TaskStat }) {
           <div className="text-xs text-gray-400">avg time</div>
         </div>
       </div>
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full bg-emerald-500 transition-all"
-            style={{ width: `${stat.completion_rate || 0}%` }}
-          />
+      <div className="flex items-center gap-3 mb-2">
+        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden flex">
+          <div className="h-full bg-emerald-500 transition-all" style={{ width: `${completedPct}%` }} />
+          <div className="h-full bg-amber-400 transition-all" style={{ width: `${couldntPct}%` }} />
         </div>
-        <span className="text-xs font-medium text-gray-600 w-12 text-right">
-          {formatPercent(stat.completion_rate)} done
-        </span>
+        <span className="text-xs font-medium text-gray-600 w-12 text-right">{formatPercent(completedPct)}</span>
       </div>
-      <p className="text-xs text-gray-400 mt-1">{stat.completed_sessions ?? 0} / {stat.total_sessions ?? 0} completed</p>
+      <div className="flex items-center gap-4">
+        <span className="flex items-center gap-1 text-xs text-emerald-600">
+          <CheckCircle size={11} /> {completed} completed
+        </span>
+        {couldntComplete > 0 && (
+          <span className="flex items-center gap-1 text-xs text-amber-600">
+            <XCircle size={11} /> {couldntComplete} couldn't complete
+          </span>
+        )}
+        {total > 0 && (
+          <span className="text-xs text-gray-400 ml-auto">{total} total</span>
+        )}
+      </div>
     </div>
   );
 }

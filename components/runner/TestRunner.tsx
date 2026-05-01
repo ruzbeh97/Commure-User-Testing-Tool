@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTracker } from '@/hooks/useTracker';
 import { sendNotification } from '@/hooks/useNotification';
 import type { Task, SessionStartResponse } from '@/types';
-import { CheckCircle, ChevronRight, Clock, ExternalLink } from 'lucide-react';
+import { CheckCircle, XCircle, ChevronRight, Clock, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { formatDuration } from '@/lib/utils';
 
@@ -55,12 +55,13 @@ export function TestRunner({ testId, testName, projectId }: Props) {
   const completeTask = (completed: boolean) => {
     if (!currentTask) return;
     const duration = Date.now() - taskStart.current;
-    setTaskTimings(prev => ({ ...prev, [currentTask.id]: { start: taskStart.current, duration, completed } }));
+    const newTimings = { ...taskTimings, [currentTask.id]: { start: taskStart.current, duration, completed } };
+    setTaskTimings(newTimings);
 
     if (currentTaskIdx < (session!.tasks.length - 1)) {
       setCurrentTaskIdx(i => i + 1);
     } else {
-      finishSession({ ...taskTimings, [currentTask.id]: { start: taskStart.current, duration, completed } });
+      finishSession(newTimings);
     }
   };
 
@@ -125,7 +126,7 @@ export function TestRunner({ testId, testName, projectId }: Props) {
                   task={task}
                   index={i}
                   current={i === currentTaskIdx}
-                  done={i < currentTaskIdx || !!taskTimings[task.id]}
+                  timing={taskTimings[task.id]}
                 />
               ))}
             </div>
@@ -146,9 +147,12 @@ export function TestRunner({ testId, testName, projectId }: Props) {
                 <Button className="w-full" onClick={() => completeTask(true)}>
                   <CheckCircle size={16} /> Mark Complete
                 </Button>
-                <Button variant="ghost" className="w-full text-gray-400 hover:text-gray-200" onClick={() => completeTask(false)}>
-                  Skip task
-                </Button>
+                <button
+                  onClick={() => completeTask(false)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-amber-400 border border-amber-800/60 bg-amber-950/30 hover:bg-amber-950/60 transition-colors"
+                >
+                  <XCircle size={15} /> Can't complete this task
+                </button>
               </div>
             </div>
           )}
@@ -164,11 +168,7 @@ export function TestRunner({ testId, testName, projectId }: Props) {
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
                 title="Prototype"
               />
-              {/* Transparent overlay for event capture — pointer-events: none lets real interaction through */}
-              <div
-                className="absolute inset-0 z-10"
-                style={{ pointerEvents: 'none' }}
-              />
+              <div className="absolute inset-0 z-10" style={{ pointerEvents: 'none' }} />
             </>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
@@ -179,7 +179,7 @@ export function TestRunner({ testId, testName, projectId }: Props) {
         </div>
       </div>
 
-      {/* Bottom bar with notes + finish */}
+      {/* Bottom bar */}
       <div className="bg-gray-900 border-t border-gray-800 px-4 py-2 flex items-center gap-3 flex-shrink-0">
         <input
           placeholder="Optional notes for this session..."
@@ -209,11 +209,19 @@ function TaskTimer({ taskStart }: { taskStart: number }) {
   );
 }
 
-function TaskItem({ task, index, current, done }: { task: Task; index: number; current: boolean; done: boolean }) {
+function TaskItem({ task, index, current, timing }: {
+  task: Task;
+  index: number;
+  current: boolean;
+  timing?: { completed: boolean };
+}) {
+  const isDone = !!timing;
   return (
-    <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${current ? 'bg-indigo-900/50 text-indigo-200' : done ? 'text-gray-600' : 'text-gray-500'}`}>
-      {done ? (
+    <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${current ? 'bg-indigo-900/50 text-indigo-200' : isDone ? 'text-gray-600' : 'text-gray-500'}`}>
+      {isDone && timing.completed ? (
         <CheckCircle size={14} className="text-emerald-500 flex-shrink-0" />
+      ) : isDone && !timing.completed ? (
+        <XCircle size={14} className="text-amber-500 flex-shrink-0" />
       ) : current ? (
         <ChevronRight size={14} className="text-indigo-400 flex-shrink-0" />
       ) : (
