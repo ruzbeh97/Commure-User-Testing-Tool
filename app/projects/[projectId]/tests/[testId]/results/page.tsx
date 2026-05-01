@@ -85,7 +85,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ projec
         ) : (
           <div className="space-y-8">
             {/* Test-level summary */}
-            {completedSessions.length > 0 && (
+            {(completedSessions.length > 0 || taskStats.some(t => t.total_sessions > 0)) && (
               <section>
                 <h2 className="text-lg font-bold text-gray-900 mb-4">Summary</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

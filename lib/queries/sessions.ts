@@ -56,8 +56,8 @@ export async function completeSession(sessionId: string, data: {
 
   const statements: { sql: string; args: (string | number | null)[] }[] = [
     {
-      sql: `UPDATE sessions SET status = 'completed', completed_at = ?, notes = ?, recording_url = ? WHERE id = ?`,
-      args: [now, data.notes ?? null, data.recording_url ?? null, sessionId],
+      sql: `UPDATE sessions SET status = 'completed', completed_at = ?, notes = ? WHERE id = ?`,
+      args: [now, data.notes ?? null, sessionId],
     },
   ];
 
@@ -72,6 +72,18 @@ export async function completeSession(sessionId: string, data: {
   }
 
   await db.batch(statements, 'write');
+
+  // Separate update so a missing recording_url column never breaks session completion
+  if (data.recording_url) {
+    try {
+      await db.execute({
+        sql: `UPDATE sessions SET recording_url = ? WHERE id = ?`,
+        args: [data.recording_url, sessionId],
+      });
+    } catch (e) {
+      console.error('[sessions] recording_url update failed:', e);
+    }
+  }
 }
 
 export async function getResults(testId: string): Promise<TestResults> {
@@ -86,17 +98,32 @@ export async function getResults(testId: string): Promise<TestResults> {
   const tasksResult = await db.execute({ sql: 'SELECT * FROM tasks WHERE test_id = ? ORDER BY sort_order', args: [testId] });
   test.tasks = toRows(tasksResult);
 
+  // Fetch recording_url separately so a missing column never breaks the page
+  let recordingUrlMap: Record<string, string | null> = {};
+  try {
+    const recResult = await db.execute({
+      sql: `SELECT id, recording_url FROM sessions WHERE test_id = ?`,
+      args: [testId],
+    });
+    for (const row of toRows<{ id: string; recording_url: string | null }>(recResult)) {
+      recordingUrlMap[row.id] = row.recording_url;
+    }
+  } catch { /* column doesn't exist yet */ }
+
   const sessionsResult = await db.execute({
     sql: `SELECT s.id, s.test_id, s.variant_id, s.tester_name, s.tester_email, s.status,
                  s.started_at, s.completed_at, s.viewport_w, s.viewport_h, s.notes,
-                 s.recording_url, v.name as variant_name
+                 v.name as variant_name
           FROM sessions s
           LEFT JOIN variants v ON v.id = s.variant_id
           WHERE s.test_id = ?
           ORDER BY s.started_at DESC`,
     args: [testId],
   });
-  const sessions = toRows<Session & { variant_name?: string }>(sessionsResult);
+  const sessions = toRows<Session & { variant_name?: string }>(sessionsResult).map(s => ({
+    ...s,
+    recording_url: recordingUrlMap[s.id] ?? null,
+  }));
 
   const taskStatsResult = await db.execute({
     sql: `SELECT ta.id as task_id, ta.instruction,
