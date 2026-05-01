@@ -2,12 +2,13 @@ import { getResults } from '@/lib/queries/sessions';
 import { getProject } from '@/lib/queries/projects';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { formatDate, formatDuration } from '@/lib/utils';
-import { FlaskConical, ArrowLeft, Play, User } from 'lucide-react';
+import { formatPercent, formatDuration } from '@/lib/utils';
+import { FlaskConical, ArrowLeft, Play, User, TrendingDown, Clock, CheckCircle } from 'lucide-react';
 import { Badge, statusBadge, typeBadge } from '@/components/ui/Badge';
 import { HeatmapCanvas } from '@/components/results/HeatmapCanvas';
 import { AnalyticsPanel } from '@/components/results/AnalyticsPanel';
-import type { TestType, Session } from '@/types';
+import { SessionCard } from '@/components/results/SessionCard';
+import type { TestType, SessionTaskResult } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,25 @@ export default async function ResultsPage({ params }: { params: Promise<{ projec
   const [project, results] = await Promise.all([getProject(projectId), getResults(testId)]);
   if (!project || !results?.test) notFound();
 
-  const { test, sessions, taskStats, clickEvents, variantComparison } = results;
+  const { test, sessions, taskStats, clickEvents, variantComparison, sessionTaskResults = [] } = results;
+
+  // Group per-session task results
+  const taskResultsBySession = sessionTaskResults.reduce<Record<string, SessionTaskResult[]>>((acc, tr) => {
+    (acc[tr.session_id] ??= []).push(tr);
+    return acc;
+  }, {});
+
+  // Test-level insights
+  const completedSessions = sessions.filter(s => s.status === 'completed');
+  const avgDuration = completedSessions.length
+    ? completedSessions.reduce((s, sess) => s + ((sess.completed_at ?? sess.started_at) - sess.started_at), 0) / completedSessions.length
+    : null;
+  const hardestTask = taskStats.length
+    ? taskStats.reduce((a, b) => (a.completion_rate ?? 100) < (b.completion_rate ?? 100) ? a : b)
+    : null;
+  const overallCompletion = taskStats.length
+    ? taskStats.reduce((s, t) => s + (t.completion_rate ?? 0), 0) / taskStats.length
+    : null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -65,6 +84,37 @@ export default async function ResultsPage({ params }: { params: Promise<{ projec
           </div>
         ) : (
           <div className="space-y-8">
+            {/* Test-level summary */}
+            {completedSessions.length > 0 && (
+              <section>
+                <h2 className="text-lg font-bold text-gray-900 mb-4">Summary</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <SummaryCard
+                    icon={<CheckCircle size={18} className="text-emerald-500" />}
+                    label="Overall completion rate"
+                    value={overallCompletion !== null ? formatPercent(overallCompletion) : '—'}
+                    sub={`across ${completedSessions.length} completed session${completedSessions.length !== 1 ? 's' : ''}`}
+                  />
+                  <SummaryCard
+                    icon={<Clock size={18} className="text-indigo-500" />}
+                    label="Avg session duration"
+                    value={avgDuration !== null ? formatDuration(avgDuration) : '—'}
+                    sub="for completed sessions"
+                  />
+                  {hardestTask && (
+                    <SummaryCard
+                      icon={<TrendingDown size={18} className="text-amber-500" />}
+                      label="Most challenging task"
+                      value={formatPercent(hardestTask.completion_rate ?? 0) + ' completion'}
+                      sub={hardestTask.instruction}
+                      subTruncate
+                    />
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Per-task analytics */}
             <section>
               <h2 className="text-lg font-bold text-gray-900 mb-4">Analytics</h2>
               <AnalyticsPanel
@@ -74,6 +124,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ projec
               />
             </section>
 
+            {/* Heatmap */}
             <section>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-gray-900">Click Heatmap</h2>
@@ -85,52 +136,42 @@ export default async function ResultsPage({ params }: { params: Promise<{ projec
               </div>
             </section>
 
+            {/* Session cards */}
             <section>
               <h2 className="text-lg font-bold text-gray-900 mb-4">Sessions ({sessions.length})</h2>
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="text-left px-5 py-3 font-semibold text-gray-600">Tester</th>
-                      {test.type === 'ab' && <th className="text-left px-5 py-3 font-semibold text-gray-600">Variant</th>}
-                      <th className="text-left px-5 py-3 font-semibold text-gray-600">Status</th>
-                      <th className="text-left px-5 py-3 font-semibold text-gray-600">Duration</th>
-                      <th className="text-left px-5 py-3 font-semibold text-gray-600">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {sessions.map((s: Session & { variant_name?: string }) => (
-                      <tr key={s.id} className="hover:bg-gray-50/50">
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center">
-                              <User size={13} className="text-indigo-500" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900">{s.tester_name || 'Anonymous'}</p>
-                              {s.tester_email && <p className="text-xs text-gray-400">{s.tester_email}</p>}
-                            </div>
-                          </div>
-                        </td>
-                        {test.type === 'ab' && (
-                          <td className="px-5 py-3 text-gray-600">{s.variant_name ?? '—'}</td>
-                        )}
-                        <td className="px-5 py-3">
-                          <Badge variant={statusBadge(s.status)}>{s.status.replace('_', ' ')}</Badge>
-                        </td>
-                        <td className="px-5 py-3 text-gray-600">
-                          {s.completed_at ? formatDuration(s.completed_at - s.started_at) : '—'}
-                        </td>
-                        <td className="px-5 py-3 text-gray-400 text-xs">{formatDate(s.started_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-3">
+                {sessions.map(s => (
+                  <SessionCard
+                    key={s.id}
+                    session={s}
+                    taskResults={taskResultsBySession[s.id] ?? []}
+                    showVariant={test.type === 'ab'}
+                  />
+                ))}
               </div>
             </section>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function SummaryCard({ icon, label, value, sub, subTruncate }: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub: string;
+  subTruncate?: boolean;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+      <div className="flex items-center gap-2 mb-3">
+        {icon}
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</span>
+      </div>
+      <div className="text-2xl font-bold text-gray-900 mb-1">{value}</div>
+      <div className={`text-xs text-gray-400 ${subTruncate ? 'truncate' : ''}`} title={subTruncate ? sub : undefined}>{sub}</div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { getDb, toRows, toRow } from '../db';
 import { nanoid } from 'nanoid';
-import type { Session, SessionStartResponse, TaskResult, TestResults, TaskStat, VariantStat } from '@/types';
+import type { Session, SessionStartResponse, TaskResult, TestResults, TaskStat, VariantStat, SessionTaskResult } from '@/types';
 
 export async function createSession(testId: string, info: {
   tester_name?: string;
@@ -48,13 +48,17 @@ export async function createSession(testId: string, info: {
 
 export async function completeSession(sessionId: string, data: {
   notes?: string;
+  recording_url?: string;
   taskResults?: { task_id: string; duration_ms: number; completed: boolean }[];
 }): Promise<void> {
   const db = await getDb();
   const now = Date.now();
 
   const statements: { sql: string; args: (string | number | null)[] }[] = [
-    { sql: `UPDATE sessions SET status = 'completed', completed_at = ?, notes = ? WHERE id = ?`, args: [now, data.notes ?? null, sessionId] },
+    {
+      sql: `UPDATE sessions SET status = 'completed', completed_at = ?, notes = ?, recording_url = ? WHERE id = ?`,
+      args: [now, data.notes ?? null, data.recording_url ?? null, sessionId],
+    },
   ];
 
   if (data.taskResults?.length) {
@@ -85,7 +89,7 @@ export async function getResults(testId: string): Promise<TestResults> {
   const sessionsResult = await db.execute({
     sql: `SELECT s.id, s.test_id, s.variant_id, s.tester_name, s.tester_email, s.status,
                  s.started_at, s.completed_at, s.viewport_w, s.viewport_h, s.notes,
-                 v.name as variant_name
+                 s.recording_url, v.name as variant_name
           FROM sessions s
           LEFT JOIN variants v ON v.id = s.variant_id
           WHERE s.test_id = ?
@@ -141,7 +145,19 @@ export async function getResults(testId: string): Promise<TestResults> {
     variantComparison = toRows<VariantStat>(vcResult);
   }
 
-  return { test, sessions, taskStats, clickEvents, variantComparison };
+  const sessionTaskResultsResult = await db.execute({
+    sql: `SELECT tr.session_id, tr.task_id, ta.instruction, ta.sort_order,
+                 tr.duration_ms, tr.completed
+          FROM task_results tr
+          JOIN tasks ta ON ta.id = tr.task_id
+          JOIN sessions s ON s.id = tr.session_id
+          WHERE s.test_id = ?
+          ORDER BY tr.session_id, ta.sort_order`,
+    args: [testId],
+  });
+  const sessionTaskResults = toRows<SessionTaskResult>(sessionTaskResultsResult);
+
+  return { test, sessions, taskStats, clickEvents, variantComparison, sessionTaskResults };
 }
 
 export async function insertEvents(sessionId: string, events: {

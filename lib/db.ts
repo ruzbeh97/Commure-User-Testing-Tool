@@ -81,6 +81,11 @@ async function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_tasks_test     ON tasks(test_id);
     CREATE INDEX IF NOT EXISTS idx_tests_project  ON tests(project_id);
   `);
+
+  // Additive migrations — safe to retry; errors mean column already exists
+  try {
+    await client.execute('ALTER TABLE sessions ADD COLUMN recording_url TEXT');
+  } catch { /* column already exists */ }
 }
 
 export async function getDb() {

@@ -56,6 +56,16 @@ export interface Session {
   viewport_w: number | null;
   viewport_h: number | null;
   notes: string | null;
+  recording_url: string | null;
+}
+
+export interface SessionTaskResult {
+  session_id: string;
+  task_id: string;
+  instruction: string;
+  sort_order: number;
+  duration_ms: number | null;
+  completed: number;
 }
 
 export interface TaskResult {
@@ -85,6 +95,7 @@ export interface TestResults {
   taskStats: TaskStat[];
   clickEvents: Event[];
   variantComparison?: VariantStat[];
+  sessionTaskResults?: SessionTaskResult[];
 }
 
 export interface TaskStat {

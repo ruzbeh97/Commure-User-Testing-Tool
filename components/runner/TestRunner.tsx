@@ -1,9 +1,10 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useTracker } from '@/hooks/useTracker';
+import { useRecording } from '@/hooks/useRecording';
 import { sendNotification } from '@/hooks/useNotification';
 import type { Task, SessionStartResponse } from '@/types';
-import { CheckCircle, XCircle, ChevronRight, Clock, ExternalLink } from 'lucide-react';
+import { CheckCircle, XCircle, ChevronRight, Clock, ExternalLink, Video, Mic } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { formatDuration } from '@/lib/utils';
 
@@ -24,10 +25,12 @@ export function TestRunner({ testId, testName, projectId }: Props) {
   const [testerEmail, setTesterEmail] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [recordingEnabled, setRecordingEnabled] = useState(false);
   const taskStart = useRef<number>(Date.now());
 
   const currentTask = session?.tasks[currentTaskIdx] ?? null;
   const { flush } = useTracker(session?.sessionId ?? null, currentTask?.id ?? null);
+  const { state: recState, start: startRecording, stop: stopRecording } = useRecording(recordingEnabled);
 
   useEffect(() => {
     if (phase === 'running' && currentTask) {
@@ -50,6 +53,7 @@ export function TestRunner({ testId, testName, projectId }: Props) {
     setSession(data);
     setPhase('running');
     taskStart.current = Date.now();
+    if (recordingEnabled) await startRecording();
   };
 
   const completeTask = (completed: boolean) => {
@@ -70,6 +74,8 @@ export function TestRunner({ testId, testName, projectId }: Props) {
     setSubmitting(true);
     await flush();
 
+    const recordingUrl = await stopRecording();
+
     const taskResults = Object.entries(timings).map(([task_id, t]) => ({
       task_id,
       duration_ms: t.duration ?? 0,
@@ -79,7 +85,7 @@ export function TestRunner({ testId, testName, projectId }: Props) {
     await fetch(`/api/sessions/${session.sessionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notes, taskResults }),
+      body: JSON.stringify({ notes, taskResults, recording_url: recordingUrl }),
     });
 
     sendNotification(
@@ -93,7 +99,18 @@ export function TestRunner({ testId, testName, projectId }: Props) {
   };
 
   if (phase === 'intro') {
-    return <IntroScreen testName={testName} onStart={startSession} name={testerName} email={testerEmail} onNameChange={setTesterName} onEmailChange={setTesterEmail} />;
+    return (
+      <IntroScreen
+        testName={testName}
+        onStart={startSession}
+        name={testerName}
+        email={testerEmail}
+        onNameChange={setTesterName}
+        onEmailChange={setTesterEmail}
+        recordingEnabled={recordingEnabled}
+        onRecordingChange={setRecordingEnabled}
+      />
+    );
   }
 
   if (phase === 'done') {
@@ -112,6 +129,14 @@ export function TestRunner({ testId, testName, projectId }: Props) {
           <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
         </div>
         <span className="text-gray-500 text-xs">{currentTaskIdx + 1} / {tasks.length}</span>
+        {recState === 'recording' && (
+          <span className="flex items-center gap-1.5 text-xs text-red-400 animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-red-500" /> REC
+          </span>
+        )}
+        {recState === 'uploading' && (
+          <span className="text-xs text-amber-400">Saving recording…</span>
+        )}
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -232,10 +257,14 @@ function TaskItem({ task, index, current, timing }: {
   );
 }
 
-function IntroScreen({ testName, onStart, name, email, onNameChange, onEmailChange }: {
+function IntroScreen({
+  testName, onStart, name, email, onNameChange, onEmailChange,
+  recordingEnabled, onRecordingChange,
+}: {
   testName: string; onStart: () => void;
   name: string; email: string;
   onNameChange: (v: string) => void; onEmailChange: (v: string) => void;
+  recordingEnabled: boolean; onRecordingChange: (v: boolean) => void;
 }) {
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-6">
@@ -245,12 +274,34 @@ function IntroScreen({ testName, onStart, name, email, onNameChange, onEmailChan
         </div>
         <h1 className="text-xl font-bold text-white mb-2">{testName}</h1>
         <p className="text-gray-400 text-sm mb-6">You'll be asked to complete a series of tasks. We'll record where you click to help us improve the design.</p>
-        <div className="space-y-3 mb-6 text-left">
+        <div className="space-y-3 mb-4 text-left">
           <input placeholder="Your name (optional)" value={name} onChange={e => onNameChange(e.target.value)}
             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-indigo-500" />
           <input placeholder="Your email (optional)" value={email} onChange={e => onEmailChange(e.target.value)}
             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-indigo-500" />
         </div>
+        <button
+          onClick={() => onRecordingChange(!recordingEnabled)}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors mb-6 text-left ${
+            recordingEnabled
+              ? 'border-indigo-500/60 bg-indigo-900/30 text-indigo-300'
+              : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600'
+          }`}
+        >
+          <div className={`flex-shrink-0 flex items-center justify-center gap-1 ${recordingEnabled ? 'text-indigo-400' : 'text-gray-600'}`}>
+            <Video size={15} />
+            <Mic size={13} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">Allow screen &amp; mic recording</p>
+            <p className="text-xs mt-0.5 opacity-70">Optional — helps researchers replay your session</p>
+          </div>
+          <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
+            recordingEnabled ? 'bg-indigo-500 border-indigo-500' : 'border-gray-600'
+          }`}>
+            {recordingEnabled && <CheckCircle size={12} className="text-white" />}
+          </div>
+        </button>
         <Button className="w-full" size="lg" onClick={onStart}>
           Start Test <ChevronRight size={18} />
         </Button>
