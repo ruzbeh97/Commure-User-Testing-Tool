@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { formatDate } from '@/lib/utils';
 import { Plus, ArrowLeft, FlaskConical, BarChart2, ChevronRight, Play } from 'lucide-react';
 import { Badge, statusBadge, typeBadge } from '@/components/ui/Badge';
+import { ProjectActions } from '@/components/projects/ProjectActions';
 import type { TestType } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -43,12 +44,15 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
               {project.description && <p className="text-gray-500 text-sm mt-1">{project.description}</p>}
               <p className="text-xs text-gray-400 mt-1">Created {formatDate(project.created_at)}</p>
             </div>
-            <Link
-              href={`/projects/${projectId}/tests/new`}
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm"
-            >
-              <Plus size={16} /> New Test
-            </Link>
+            <div className="flex items-center gap-2">
+              <ProjectActions projectId={projectId} />
+              <Link
+                href={`/projects/${projectId}/tests/new`}
+                className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm"
+              >
+                <Plus size={16} /> New Test
+              </Link>
+            </div>
           </div>
         </div>
 
