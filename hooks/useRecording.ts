@@ -6,6 +6,7 @@ export type RecordingState = 'idle' | 'recording' | 'uploading' | 'done' | 'erro
 
 export function useRecording(enabled: boolean) {
   const [state, setState] = useState<RecordingState>('idle');
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamsRef = useRef<MediaStream[]>([]);
@@ -38,15 +39,38 @@ export function useRecording(enabled: boolean) {
       recorder.start(1000);
       recorderRef.current = recorder;
       setState('recording');
-    } catch {
+    } catch (err) {
+      console.error('[Recording] Failed to start:', err);
       setState('error');
+      setUploadError(String(err));
     }
   }, [enabled]);
 
   const stop = useCallback((): Promise<string | null> => {
     return new Promise(resolve => {
       const recorder = recorderRef.current;
-      if (!recorder || recorder.state === 'inactive') { resolve(null); return; }
+      if (!recorder || recorder.state === 'inactive') {
+        // Still try to upload buffered chunks if any
+        if (chunksRef.current.length > 0) {
+          setState('uploading');
+          const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+          upload(`recordings/${Date.now()}.webm`, blob, {
+            access: 'public',
+            handleUploadUrl: '/api/upload',
+          }).then(({ url }) => {
+            setState('done');
+            resolve(url);
+          }).catch(err => {
+            console.error('[Recording] Upload failed:', err);
+            setUploadError(String(err));
+            setState('error');
+            resolve(null);
+          });
+        } else {
+          resolve(null);
+        }
+        return;
+      }
 
       recorder.onstop = async () => {
         streamsRef.current.forEach(s => s.getTracks().forEach(t => t.stop()));
@@ -63,7 +87,9 @@ export function useRecording(enabled: boolean) {
           });
           setState('done');
           resolve(url);
-        } catch {
+        } catch (err) {
+          console.error('[Recording] Upload failed:', err);
+          setUploadError(String(err));
           setState('error');
           resolve(null);
         }
@@ -73,5 +99,5 @@ export function useRecording(enabled: boolean) {
     });
   }, []);
 
-  return { state, start, stop };
+  return { state, uploadError, start, stop };
 }

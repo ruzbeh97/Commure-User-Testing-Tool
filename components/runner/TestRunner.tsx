@@ -26,11 +26,12 @@ export function TestRunner({ testId, testName, projectId }: Props) {
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [recordingEnabled, setRecordingEnabled] = useState(false);
+  const [recordingFailed, setRecordingFailed] = useState(false);
   const taskStart = useRef<number>(Date.now());
 
   const currentTask = session?.tasks[currentTaskIdx] ?? null;
   const { flush } = useTracker(session?.sessionId ?? null, currentTask?.id ?? null);
-  const { state: recState, start: startRecording, stop: stopRecording } = useRecording(recordingEnabled);
+  const { state: recState, uploadError, start: startRecording, stop: stopRecording } = useRecording(recordingEnabled);
 
   useEffect(() => {
     if (phase === 'running' && currentTask) {
@@ -75,6 +76,7 @@ export function TestRunner({ testId, testName, projectId }: Props) {
     await flush();
 
     const recordingUrl = await stopRecording();
+    if (recordingEnabled && !recordingUrl) setRecordingFailed(true);
 
     const taskResults = Object.entries(timings).map(([task_id, t]) => ({
       task_id,
@@ -114,7 +116,7 @@ export function TestRunner({ testId, testName, projectId }: Props) {
   }
 
   if (phase === 'done') {
-    return <DoneScreen />;
+    return <DoneScreen recordingFailed={recordingFailed} />;
   }
 
   const tasks = session!.tasks;
@@ -135,7 +137,12 @@ export function TestRunner({ testId, testName, projectId }: Props) {
           </span>
         )}
         {recState === 'uploading' && (
-          <span className="text-xs text-amber-400">Saving recording…</span>
+          <span className="flex items-center gap-1.5 text-xs text-amber-400">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" /> Saving recording…
+          </span>
+        )}
+        {recState === 'error' && (
+          <span className="text-xs text-red-400">Recording failed</span>
         )}
       </div>
 
@@ -310,7 +317,7 @@ function IntroScreen({
   );
 }
 
-function DoneScreen() {
+function DoneScreen({ recordingFailed }: { recordingFailed: boolean }) {
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center">
       <div className="text-center">
@@ -319,6 +326,9 @@ function DoneScreen() {
         </div>
         <h1 className="text-2xl font-bold text-white mb-2">All done!</h1>
         <p className="text-gray-400">Thank you for completing the test. You can close this window.</p>
+        {recordingFailed && (
+          <p className="text-amber-400 text-xs mt-3">Note: the screen recording could not be saved.</p>
+        )}
       </div>
     </div>
   );
