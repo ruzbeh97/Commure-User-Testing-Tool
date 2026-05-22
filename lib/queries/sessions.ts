@@ -1,4 +1,4 @@
-import { getDb, toRows, toRow } from '../db';
+import { withRetry, toRows, toRow } from '../db';
 import { nanoid } from 'nanoid';
 import type { Session, SessionStartResponse, TaskResult, TestResults, TaskStat, VariantStat, SessionTaskResult } from '@/types';
 
@@ -8,7 +8,7 @@ export async function createSession(testId: string, info: {
   viewport_w?: number;
   viewport_h?: number;
 }): Promise<SessionStartResponse> {
-  const db = await getDb();
+  return withRetry(async db => {
   const now = Date.now();
 
   const testResult = await db.execute({ sql: 'SELECT * FROM tests WHERE id = ?', args: [testId] });
@@ -44,6 +44,7 @@ export async function createSession(testId: string, info: {
   });
 
   return { sessionId, variantId, prototypeUrl, tasks: tasks as any[] };
+  });
 }
 
 export async function completeSession(sessionId: string, data: {
@@ -51,8 +52,8 @@ export async function completeSession(sessionId: string, data: {
   recording_url?: string;
   taskResults?: { task_id: string; duration_ms: number; completed: boolean }[];
 }): Promise<void> {
-  const db = await getDb();
   const now = Date.now();
+  await withRetry(async db => {
 
   const statements: { sql: string; args: (string | number | null)[] }[] = [
     {
@@ -84,11 +85,11 @@ export async function completeSession(sessionId: string, data: {
       console.error('[sessions] recording_url update failed:', e);
     }
   }
+  });
 }
 
 export async function getResults(testId: string): Promise<TestResults> {
-  const db = await getDb();
-
+  return withRetry(async db => {
   const testResult = await db.execute({ sql: 'SELECT * FROM tests WHERE id = ?', args: [testId] });
   const test = toRow<any>(testResult);
 
@@ -185,6 +186,7 @@ export async function getResults(testId: string): Promise<TestResults> {
   const sessionTaskResults = toRows<SessionTaskResult>(sessionTaskResultsResult);
 
   return { test, sessions, taskStats, clickEvents, variantComparison, sessionTaskResults };
+  });
 }
 
 export async function insertEvents(sessionId: string, events: {
@@ -195,10 +197,11 @@ export async function insertEvents(sessionId: string, events: {
   timestamp: number;
   metadata?: string;
 }[]): Promise<void> {
-  const db = await getDb();
-  const statements = events.map(e => ({
-    sql: `INSERT INTO events (session_id, task_id, type, x, y, timestamp, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    args: [sessionId, e.task_id ?? null, e.type, e.x, e.y, e.timestamp, e.metadata ?? null] as (string | number | null)[],
-  }));
-  await db.batch(statements, 'write');
+  await withRetry(async db => {
+    const statements = events.map(e => ({
+      sql: `INSERT INTO events (session_id, task_id, type, x, y, timestamp, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      args: [sessionId, e.task_id ?? null, e.type, e.x, e.y, e.timestamp, e.metadata ?? null] as (string | number | null)[],
+    }));
+    await db.batch(statements, 'write');
+  });
 }

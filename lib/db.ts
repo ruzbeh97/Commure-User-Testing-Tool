@@ -1,14 +1,34 @@
-import { createClient, type ResultSet, type Row } from '@libsql/client';
+import { createClient, type Client, type ResultSet } from '@libsql/client';
 
-const client = createClient({
-  url: process.env.TURSO_DATABASE_URL ?? 'file:/tmp/app.db',
-  authToken: process.env.TURSO_AUTH_TOKEN,
-});
-
+let _client: Client | null = null;
 let schemaInitialized = false;
 let initPromise: Promise<void> | null = null;
 
-async function initSchema() {
+function buildClient(): Client {
+  return createClient({
+    url: process.env.TURSO_DATABASE_URL ?? 'file:/tmp/app.db',
+    authToken: process.env.TURSO_AUTH_TOKEN,
+  });
+}
+
+function getClient(): Client {
+  if (!_client) _client = buildClient();
+  return _client;
+}
+
+function resetClient() {
+  try { _client?.close(); } catch { /* ignore */ }
+  _client = null;
+  schemaInitialized = false;
+  initPromise = null;
+}
+
+function isTransientError(err: unknown): boolean {
+  const msg = String((err as Error)?.message ?? err);
+  return /fetch failed|socket disconnected|ECONNRESET|ETIMEDOUT|ENETUNREACH|network|stream/i.test(msg);
+}
+
+async function initSchema(client: Client) {
   await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS projects (
       id          TEXT PRIMARY KEY,
@@ -88,12 +108,56 @@ async function initSchema() {
   } catch { /* column already exists */ }
 }
 
-export async function getDb() {
-  if (!schemaInitialized) {
-    if (!initPromise) initPromise = initSchema().then(() => { schemaInitialized = true; });
-    await initPromise;
+/**
+ * Returns a libSQL client with schema ensured.
+ *
+ * Resilience:
+ *  - If schema init fails (e.g. Turso unreachable), we clear initPromise so the
+ *    next request retries instead of forever-rejecting the cached promise.
+ *  - On transient network errors, we rebuild the client and try once more.
+ */
+export async function getDb(): Promise<Client> {
+  if (schemaInitialized) return getClient();
+
+  if (!initPromise) {
+    initPromise = (async () => {
+      try {
+        await initSchema(getClient());
+        schemaInitialized = true;
+      } catch (err) {
+        initPromise = null; // allow retry on next request
+        if (isTransientError(err)) {
+          // Rebuild client and try once
+          resetClient();
+          await initSchema(getClient());
+          schemaInitialized = true;
+          return;
+        }
+        throw err;
+      }
+    })();
   }
-  return client;
+
+  await initPromise;
+  return getClient();
+}
+
+/**
+ * Wrap a DB query with a single retry on transient network errors.
+ * The libSQL HTTP client can drop sockets between serverless invocations;
+ * rebuilding the client recovers cleanly.
+ */
+export async function withRetry<T>(fn: (client: Client) => Promise<T>): Promise<T> {
+  const client = await getDb();
+  try {
+    return await fn(client);
+  } catch (err) {
+    if (!isTransientError(err)) throw err;
+    console.error('[db] transient error, retrying with fresh client:', err);
+    resetClient();
+    const fresh = await getDb();
+    return await fn(fresh);
+  }
 }
 
 export function toRows<T>(result: ResultSet): T[] {
